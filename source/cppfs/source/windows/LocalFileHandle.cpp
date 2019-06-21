@@ -325,6 +325,8 @@ bool LocalFileHandle::createLink(AbstractFileHandleBackend & dest)
 
 bool LocalFileHandle::createSymbolicLink(AbstractFileHandleBackend & dest)
 {
+    // Check for Windows Vista or later
+#if _WIN32_WINNT >= 0x0600
     // Check source file
     if (!isFile()) return false;
 
@@ -347,6 +349,10 @@ bool LocalFileHandle::createSymbolicLink(AbstractFileHandleBackend & dest)
 
     // Done
     return true;
+#else
+    // Not supported on Windows XP and earlier
+    return false;
+#endif
 }
 
 bool LocalFileHandle::rename(const std::string & filename)

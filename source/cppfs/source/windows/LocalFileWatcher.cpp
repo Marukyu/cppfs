@@ -196,10 +196,17 @@ void LocalFileWatcher::watch(int timeout)
                         break;
 
                     case FILE_ACTION_MODIFIED:
-                    case FILE_ACTION_RENAMED_NEW_NAME:
                         eventType = FileModified;
                         break;
-                
+
+                    case FILE_ACTION_RENAMED_OLD_NAME:
+                        eventType = FileMovedFrom;
+                        break;
+
+                    case FILE_ACTION_RENAMED_NEW_NAME:
+                        eventType = FileMovedTo;
+                        break;
+
                     default:
                         break;
                 }
@@ -231,7 +238,7 @@ void LocalFileWatcher::createWatcher(Watcher & watcher)
 {
     // Get events to watch for
     DWORD flags = 0;
-    if (watcher.events & (FileCreated | FileRemoved))
+    if (watcher.events & (FileCreated | FileRemoved | FileMovedFrom | FileMovedTo))
         flags |= FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME;
     if (watcher.events & FileModified)    flags |= FILE_NOTIFY_CHANGE_LAST_WRITE;
     if (watcher.events & FileAttrChanged) flags |= FILE_NOTIFY_CHANGE_ATTRIBUTES;

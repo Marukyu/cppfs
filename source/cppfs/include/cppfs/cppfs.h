@@ -38,7 +38,10 @@ enum FileEvent
     FileCreated     = 0x01, ///< A file or directory has been created
     FileRemoved     = 0x02, ///< A file or directory has been removed
     FileModified    = 0x04, ///< A file or directory has been modified
-    FileAttrChanged = 0x08  ///< Attributes on a file or directory have been modified
+    FileAttrChanged = 0x08, ///< Attributes on a file or directory have been modified
+    FileWritten     = 0x10, ///< A file or directory has been written to and closed
+    FileMovedFrom   = 0x20, ///< A file or directory has been moved or renamed (fired for the old file name)
+    FileMovedTo     = 0x40, ///< A file or directory has been moved or renamed (fired for the new file name)
 };
 
 /**

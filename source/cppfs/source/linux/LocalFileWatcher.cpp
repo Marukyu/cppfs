@@ -52,6 +52,9 @@ void LocalFileWatcher::add(FileHandle & dir, unsigned int events, RecursiveMode 
     if (events & FileRemoved)     flags |= IN_DELETE;
     if (events & FileModified)    flags |= IN_MODIFY;
     if (events & FileAttrChanged) flags |= IN_ATTRIB;
+    if (events & FileWritten)     flags |= IN_CLOSE_WRITE;
+    if (events & FileMovedFrom)   flags |= IN_MOVED_FROM;
+    if (events & FileMovedTo)     flags |= IN_MOVED_TO;
 
 
     // Create watcher
@@ -124,6 +127,9 @@ void LocalFileWatcher::watch(int timeout)
             else if (event->mask & IN_DELETE) eventType = FileRemoved;
             else if (event->mask & IN_MODIFY) eventType = FileModified;
             else if (event->mask & IN_ATTRIB) eventType = FileAttrChanged;
+            else if (event->mask & IN_CLOSE_WRITE) eventType = FileWritten;
+            else if (event->mask & IN_MOVED_FROM) eventType = FileMovedFrom;
+            else if (event->mask & IN_MOVED_TO) eventType = FileMovedTo;
 
             // Get watcher
             auto & watcher = m_watchers[event->wd];
@@ -132,7 +138,8 @@ void LocalFileWatcher::watch(int timeout)
             FileHandle fh = (event->len > 0 ? watcher.dir.open(std::string(event->name)) : watcher.dir);
 
             // Watch new directories
-            if (fh.isDirectory() && !fh.isSymbolicLink() && eventType == FileCreated && watcher.recursive == Recursive) {
+            bool isCreationEvent = (eventType == FileCreated || eventType == FileMovedTo);
+            if (fh.isDirectory() && !fh.isSymbolicLink() && isCreationEvent && watcher.recursive == Recursive) {
                 add(fh, watcher.events, watcher.recursive);
             }
 

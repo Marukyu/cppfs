@@ -119,10 +119,12 @@ endif()
 if("${CMAKE_SYSTEM_NAME}" MATCHES "Windows")
     set(headers ${headers}
         ${include_path}/windows/LocalFileWatcher.h
+        ${include_path}/windows/FileNameConversions.h
     )
 
     set(sources ${sources}
         ${source_path}/windows/LocalFileWatcher.cpp
+        ${source_path}/windows/FileNameConversions.cpp
     )
 endif()
 

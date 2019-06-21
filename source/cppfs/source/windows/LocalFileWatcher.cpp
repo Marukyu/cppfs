@@ -5,6 +5,7 @@
 
 #include <cppfs/FilePath.h>
 #include <cppfs/windows/LocalFileSystem.h>
+#include <cppfs/windows/FileNameConversions.h>
 
 
 namespace
@@ -40,7 +41,7 @@ namespace cppfs
 LocalFileWatcher::LocalFileWatcher(FileWatcher * fileWatcher, std::shared_ptr<LocalFileSystem> fs)
 : AbstractFileWatcherBackend(fileWatcher)
 , m_fs(fs)
-, m_waitStopEvent(::CreateEvent(NULL, TRUE, FALSE, NULL))
+, m_waitStopEvent(::CreateEventW(NULL, TRUE, FALSE, NULL))
 {
     // Create critical section
     ::InitializeCriticalSection(&m_mutexWatchers);
@@ -64,8 +65,8 @@ AbstractFileSystem * LocalFileWatcher::fs() const
 void LocalFileWatcher::add(FileHandle & dir, unsigned int events, RecursiveMode recursive)
 {
     // Open directory
-    ::HANDLE dirHandle = ::CreateFileA(
-        dir.path().c_str(),                                     // Pointer to the directory name
+    ::HANDLE dirHandle = ::CreateFileW(
+        convert::utf8ToWideString(dir.path()).c_str(),          // Pointer to the directory name
         FILE_LIST_DIRECTORY,                                    // Access (read/write) mode
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, // File share mode
         NULL,                                                   // Security descriptor
@@ -84,9 +85,11 @@ void LocalFileWatcher::add(FileHandle & dir, unsigned int events, RecursiveMode 
     watcher->dir        = dir;
     watcher->events     = events;
     watcher->recursive  = recursive;
+    watcher->initialized = false;
     watcher->dirHandle  = std::shared_ptr<void>(dirHandle, ::CloseHandle);
-    watcher->event      = std::shared_ptr<void>(::CreateEvent(NULL, TRUE, FALSE, NULL), ::CloseHandle);
+    watcher->event      = std::shared_ptr<void>(::CreateEventW(NULL, TRUE, FALSE, NULL), ::CloseHandle);
     watcher->overlapped.hEvent = watcher->event.get();
+    watcher->buffer.resize(1024 * sizeof(FILE_NOTIFY_INFORMATION));
 
     // Check if event could be created
     if (!watcher->event) {
@@ -114,13 +117,6 @@ void LocalFileWatcher::watch(int timeout)
         // Add event handle
         waitHandles.push_back(watcher.event.get());
 
-        // Get events to watch for
-        DWORD flags = 0;
-        if (watcher.events & FileCreated)     flags |= FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME;
-        if (watcher.events & FileRemoved)     flags |= FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME;
-        if (watcher.events & FileModified)    flags |= FILE_NOTIFY_CHANGE_LAST_WRITE;
-        if (watcher.events & FileAttrChanged) flags |= FILE_NOTIFY_CHANGE_ATTRIBUTES;
-
         // Check if data is available
         DWORD size = 0;
         if (!::GetOverlappedResult(watcher.dirHandle.get(), &watcher.overlapped, &size, FALSE)) {
@@ -130,22 +126,11 @@ void LocalFileWatcher::watch(int timeout)
             }
         }
 
-        // Create watcher
-        if (!::ReadDirectoryChangesW(
-            watcher.dirHandle.get(),
-            watcher.buffer,
-            sizeof(watcher.buffer),
-            (BOOL)watcher.recursive,
-            flags,
-            NULL,
-            &watcher.overlapped,
-            NULL))
+        // Initialize watcher if necessary
+        if (!watcher.initialized)
         {
-            // Error creating the watcher
-            auto error = GetLastError();
-            if (error != ERROR_IO_PENDING) {
-                throw std::runtime_error("Error calling ReadDirectoryChangesW: " + std::to_string(error));
-            }
+            createWatcher(watcher);
+            watcher.initialized = true;
         }
     }
 
@@ -183,27 +168,21 @@ void LocalFileWatcher::watch(int timeout)
     // Read events
     DWORD size = 0;
     if (::GetOverlappedResult(watcher.dirHandle.get(), &watcher.overlapped, &size, FALSE) && size > 0) {
+
         // Process events
-        char * entry = reinterpret_cast<char *>(watcher.buffer);
+        char * entry = reinterpret_cast<char *>(watcher.buffer.data());
         while (entry) {
             // Get file event notification
             FILE_NOTIFY_INFORMATION * fileEvent = reinterpret_cast<FILE_NOTIFY_INFORMATION*>(entry);
 
-            // Convert filename to 8-bit character string
-            char fileName[4096];
-            int numBytes = ::WideCharToMultiByte(CP_ACP,
-                0,
-                fileEvent->FileName,
-                fileEvent->FileNameLength / sizeof(WCHAR),
-                fileName,
-                sizeof(fileName),
-                NULL,
-                NULL);
+            // Convert filename to UTF-8
+            std::string fileName = convert::wideToUtf8String(std::wstring(fileEvent->FileName,
+                fileEvent->FileNameLength / sizeof(wchar_t)));
 
             // Check if conversion was successful
-            if (numBytes != 0) {
+            if (!fileName.empty()) {
                 // Get filename in unified format
-                std::string fname = FilePath(std::string(fileName, fileName + numBytes)).path();
+                std::string fname = FilePath(fileName).path();
 
                 // Determine event type
                 FileEvent eventType = (FileEvent)0;
@@ -242,8 +221,38 @@ void LocalFileWatcher::watch(int timeout)
                 entry = nullptr;
             }
         }
+
+        // Re-initialize watcher
+        createWatcher(watcher);
     }
 }
 
+void LocalFileWatcher::createWatcher(Watcher & watcher)
+{
+    // Get events to watch for
+    DWORD flags = 0;
+    if (watcher.events & (FileCreated | FileRemoved))
+        flags |= FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME;
+    if (watcher.events & FileModified)    flags |= FILE_NOTIFY_CHANGE_LAST_WRITE;
+    if (watcher.events & FileAttrChanged) flags |= FILE_NOTIFY_CHANGE_ATTRIBUTES;
+
+    // Create watcher
+    if (!::ReadDirectoryChangesW(
+        watcher.dirHandle.get(),
+        watcher.buffer.data(),
+        watcher.buffer.size(),
+        watcher.recursive == Recursive,
+        flags,
+        NULL,
+        &watcher.overlapped,
+        NULL))
+    {
+        // Error creating the watcher
+        auto error = GetLastError();
+        if (error != ERROR_IO_PENDING) {
+            throw std::runtime_error("Error calling ReadDirectoryChangesW: " + std::to_string(error));
+        }
+    }
+}
 
 } // namespace cppfs

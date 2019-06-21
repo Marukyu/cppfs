@@ -5,6 +5,7 @@
 
 #include <cppfs/FilePath.h>
 #include <cppfs/windows/LocalFileSystem.h>
+#include <cppfs/windows/FileNameConversions.h>
 
 
 namespace cppfs
@@ -19,7 +20,7 @@ LocalFileIterator::LocalFileIterator(std::shared_ptr<LocalFileSystem> fs, const 
 , m_findData(nullptr)
 {
 	// Create find data
-	m_findData = static_cast<void *>(new WIN32_FIND_DATA);
+	m_findData = static_cast<void *>(new WIN32_FIND_DATAW);
 
 	// Read first directory entry
 	readNextEntry();
@@ -34,7 +35,7 @@ LocalFileIterator::~LocalFileIterator()
 	}
 
 	// Destroy find data
-	delete static_cast<WIN32_FIND_DATA *>(m_findData);
+	delete static_cast<WIN32_FIND_DATAW *>(m_findData);
 }
 
 std::unique_ptr<AbstractFileIteratorBackend> LocalFileIterator::clone() const
@@ -78,7 +79,7 @@ std::string LocalFileIterator::name() const
     }
 
     // Return filename of current item
-	return std::string(static_cast<WIN32_FIND_DATA *>(m_findData)->cFileName);
+	return convert::wideToUtf8String(static_cast<WIN32_FIND_DATAW *>(m_findData)->cFileName);
 }
 
 void LocalFileIterator::next()
@@ -97,7 +98,8 @@ void LocalFileIterator::readNextEntry()
 		{
 			// Open directory
 			std::string query = FilePath(m_path).fullPath() + "/*";
-			m_findHandle = FindFirstFileA(query.c_str(), static_cast<WIN32_FIND_DATA *>(m_findData));
+			m_findHandle = FindFirstFileW(convert::utf8ToWideString(query).c_str(),
+			    static_cast<WIN32_FIND_DATAW *>(m_findData));
 
 			// Abort if directory could not be opened
 			if (m_findHandle == INVALID_HANDLE_VALUE)
@@ -109,7 +111,7 @@ void LocalFileIterator::readNextEntry()
 
 		else {
 			// Read next entry
-			if (!FindNextFile(m_findHandle, static_cast<WIN32_FIND_DATA *>(m_findData)))
+			if (!FindNextFileW(m_findHandle, static_cast<WIN32_FIND_DATAW *>(m_findData)))
 			{
 				// No more files, close
 				FindClose(m_findHandle);
@@ -122,7 +124,7 @@ void LocalFileIterator::readNextEntry()
 		m_index++;
 
 		// Get filename
-		filename = std::string(static_cast<WIN32_FIND_DATA *>(m_findData)->cFileName);
+		filename = convert::wideToUtf8String(static_cast<WIN32_FIND_DATAW *>(m_findData)->cFileName);
 	} while (filename == ".." || filename == ".");
 }
 

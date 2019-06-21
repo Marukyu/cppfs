@@ -59,11 +59,16 @@ protected:
         FileHandle            dir;           ///< Directory that is watched
         unsigned int          events;        ///< Watched events
         RecursiveMode         recursive;     ///< Watch recursively?
+        bool                  initialized;   ///< True if the directory event listener has been initialized
         std::shared_ptr<void> dirHandle;     ///< Handle for the directory
         std::shared_ptr<void> event;         ///< Event that is triggered for this watcher
         ::OVERLAPPED          overlapped;    ///< Overlapped data (for asynchronous operation)
-        char                  buffer[16384]; ///< Buffer for overlapped data (1024 * sizeof(FILE_NOTIFY_INFORMATION))
+        std::vector<char>     buffer;        ///< Buffer for overlapped data
     };
+
+
+protected:
+    void createWatcher(Watcher & watcher);
 
 
 protected:

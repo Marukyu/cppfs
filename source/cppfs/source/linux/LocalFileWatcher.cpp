@@ -67,7 +67,7 @@ void LocalFileWatcher::add(FileHandle & dir, unsigned int events, RecursiveMode 
         {
             // Check if entry is a directory
             FileHandle fh2 = dir.open(*it);
-            if (fh2.isDirectory()) {
+            if (fh2.isDirectory() && !fh2.isSymbolicLink()) {
                 // Watch directory
                 add(fh2, events, recursive);
             }
@@ -132,7 +132,7 @@ void LocalFileWatcher::watch(int timeout)
             FileHandle fh = (event->len > 0 ? watcher.dir.open(std::string(event->name)) : watcher.dir);
 
             // Watch new directories
-            if (fh.isDirectory() && eventType == FileCreated && watcher.recursive == Recursive) {
+            if (fh.isDirectory() && !fh.isSymbolicLink() && eventType == FileCreated && watcher.recursive == Recursive) {
                 add(fh, watcher.events, watcher.recursive);
             }
 

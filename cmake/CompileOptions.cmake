@@ -154,3 +154,8 @@ if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU" OR "${CMAKE_SYSTEM_NAME}" MATCHES "L
         -pthread
     )
 endif()
+
+# MSVC linker options
+if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "MSVC")
+    set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
